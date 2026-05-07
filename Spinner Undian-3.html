@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Undian Nomor Urut SDN</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Library untuk Ekspor Excel -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&display=swap');
+        
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: radial-gradient(circle, #1a2a6c, #b21f1f, #fdbb2d);
+            min-height: 100vh;
+            color: white;
+        }
+
+        .wheel-container {
+            position: relative;
+            width: 320px;
+            height: 320px;
+            margin: 0 auto;
+        }
+
+        @media (min-width: 768px) {
+            .wheel-container {
+                width: 450px;
+                height: 450px;
+            }
+        }
+
+        #wheel {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            border: 8px solid #fff;
+            box-shadow: 0 0 30px rgba(0,0,0,0.5);
+            /* Durasi putaran 6 detik dengan fungsi waktu yang halus */
+            transition: transform 6s cubic-bezier(0.15, 0, 0.15, 1);
+        }
+
+        .pointer {
+            position: absolute;
+            top: -20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 40px;
+            height: 40px;
+            background: #fff;
+            clip-path: polygon(50% 100%, 0 0, 100% 0);
+            z-index: 10;
+        }
+
+        .result-card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .school-item {
+            transition: all 0.3s ease;
+        }
+
+        .school-done {
+            background: rgba(0,0,0,0.3) !important;
+            text-decoration: line-through;
+            opacity: 0.7;
+        }
+
+        .active-school {
+            border: 2px solid #fdbb2d !important;
+            background: rgba(253, 187, 45, 0.2) !important;
+        }
+
+        /* Gaya Tooltip */
+        .tooltip {
+            visibility: hidden;
+            position: absolute;
+            bottom: 110%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.85);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            white-space: nowrap;
+            z-index: 50;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        .group:hover .tooltip {
+            visibility: visible;
+            opacity: 1;
+        }
+
+        /* Scrollbar Kustom */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 10px; }
+        
+        .scale-up-center {
+            animation: scale-up-center 0.4s cubic-bezier(0.390, 0.575, 0.565, 1.000) both;
+        }
+
+        @keyframes scale-up-center {
+            0% { transform: scale(0.5); }
+            100% { transform: scale(1); }
+        }
+    </style>
+</head>
+<body class="p-4 md:p-6">
+    <div class="max-w-7xl mx-auto">
+        <header class="text-center mb-8">
+            <h1 class="text-3xl md:text-4xl font-extrabold mb-2 uppercase tracking-tight text-white drop-shadow-md">Undian Nomor Urut</h1>
+            <p class="text-lg font-semibold text-yellow-300 drop-shadow-sm">KEGIATAN LOMBA JENJANG SD TINGKAT KECAMATAN SUKARESMI</p>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            <!-- Panel Kiri: Daftar Sekolah -->
+            <div class="lg:col-span-1 flex flex-col space-y-4">
+                <div class="result-card p-5 rounded-2xl flex flex-col h-[600px] shadow-xl">
+                    <div class="flex justify-between items-center mb-4 border-b border-white/20 pb-2">
+                        <h2 class="text-xl font-bold">Daftar Sekolah</h2>
+                        <span id="schoolCount" class="bg-white/20 px-2 py-1 rounded text-sm font-mono">--</span>
+                    </div>
+                    
+                    <div id="schoolList" class="flex-1 overflow-y-auto space-y-2 pr-2">
+                        <!-- Konten dimuat melalui JavaScript -->
+                    </div>
+
+                    <!-- Tombol Tambah Sekolah -->
+                    <div class="relative group mt-4">
+                        <button onclick="addNewSchool()" class="w-full flex items-center justify-center bg-green-600 hover:bg-green-700 p-3 rounded-xl transition-all shadow-lg hover:scale-[1.02] active:scale-95">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                            </svg>
+                        </button>
+                        <span class="tooltip">Tambah Sekolah Baru</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Panel Tengah: Roda Undian -->
+            <div class="lg:col-span-2 flex flex-col items-center justify-center space-y-6">
+                <div class="wheel-container">
+                    <div class="pointer"></div>
+                    <canvas id="wheel" width="600" height="600"></canvas>
+                </div>
+                
+                <div id="statusMessage" class="text-center h-12 text-xl font-semibold text-yellow-200 drop-shadow-md">
+                    Silakan pilih sekolah untuk memulai!
+                </div>
+
+                <div class="flex space-x-4">
+                    <button id="spinBtn" disabled class="bg-gradient-to-r from-red-600 to-orange-500 px-12 py-4 rounded-full text-2xl font-bold shadow-2xl hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed transition-all">
+                        PUTAR RODA
+                    </button>
+                </div>
+            </div>
+
+            <!-- Panel Kanan: Hasil & Aksi Global -->
+            <div class="lg:col-span-1 flex flex-col space-y-4">
+                <div class="result-card p-5 rounded-2xl flex flex-col h-[600px] shadow-xl">
+                    <div class="flex justify-between items-center mb-4 border-b border-white/20 pb-2">
+                        <h2 class="text-xl font-bold">Hasil Undian</h2>
+                        <span id="resultsIndicator" class="bg-red-600/30 text-red-200 px-2 py-1 rounded text-sm font-mono font-bold">0/0</span>
+                    </div>
+                    
+                    <div id="resultsArea" class="flex-1 overflow-y-auto space-y-3 pr-2">
+                        <!-- Konten dimuat melalui JavaScript -->
+                    </div>
+
+                    <div class="flex space-x-3 mt-4">
+                        <!-- Tombol Reset -->
+                        <div class="relative group flex-1">
+                            <button onclick="handleReset()" class="w-full flex items-center justify-center bg-gray-700 hover:bg-gray-800 p-3 rounded-xl transition-all shadow-md active:scale-95">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                </svg>
+                            </button>
+                            <span class="tooltip">Reset Semua Data</span>
+                        </div>
+                        
+                        <!-- Tombol Ekspor -->
+                        <div class="relative group flex-1">
+                            <button onclick="exportToExcel()" class="w-full flex items-center justify-center bg-blue-600 hover:bg-blue-700 p-3 rounded-xl transition-all shadow-md active:scale-95">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                </svg>
+                            </button>
+                            <span class="tooltip">Ekspor ke Excel</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Tampilan Hasil -->
+    <div id="resultModal" class="fixed inset-0 bg-black/80 hidden items-center justify-center z-50 p-4">
+        <div class="bg-white text-gray-900 p-8 rounded-3xl text-center max-w-sm w-full shadow-2xl scale-up-center">
+            <h3 id="modalSchool" class="text-2xl font-bold mb-2">Nama Sekolah</h3>
+            <p class="text-gray-500 uppercase font-bold tracking-widest text-sm">Nomor Urut Anda:</p>
+            <div id="modalNumber" class="text-8xl font-black text-red-600 my-4">--</div>
+            <button onclick="closeModal()" class="w-full bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700 transition-colors">Tutup</button>
+        </div>
+    </div>
+
+    <script>
+        // Kunci Penyimpanan Lokal
+        const STORAGE_KEYS = {
+            SCHOOLS: 'sdn_undian_schools_list',
+            RESULTS: 'sdn_undian_results_map',
+            MAPPING: 'sdn_undian_hidden_mapping'
+        };
+
+        // Data Default
+        const DEFAULT_SCHOOLS = [
+            "SDN CIBUNGUR 1", "SDN CIBUNGUR 2", "SDN CIBUNGUR 3",
+            "SDN CIKUYA 1", "SDN CIKUYA 2", "SDN CIKUYA 3",
+            "SDN KARYASARI 1", "SDN KARYASARI 2", "SDN KARYASARI 4",
+            "SDN KUBANGKAMPIL 1", "SDN KUBANGKAMPIL 2",
+            "SDN PASIRKADU 1", "SDN PASIRKADU 2", "SDN PASIRKADU 3", "SDN PASIRKADU 4",
+            "SDN PERDANA 1", "SDN PERDANA 2", "SDN PERDANA 3",
+            "SDN SEUSEUPAN 1", "SDN SEUSEUPAN 2",
+            "SDN SIDAMUKTI 1", "SDN SIDAMUKTI 2", "SDN SIDAMUKTI 3", "SDN SIDAMUKTI 4",
+            "SDN SUKARESMI 1", "SDN SUKARESMI 2",
+            "SDN WERU 1", "SDN WERU 2"
+        ];
+
+        // Variabel Global
+        let schools = [];
+        let results = {}; 
+        let finalMapping = {};
+        let currentSchool = null;
+        let isSpinning = false;
+        let currentRotation = 0;
+        let canvas, ctx, spinBtn, statusMsg;
+
+        // Efek Suara
+        const spinSound = new Audio('https://assets.mixkit.co/active_storage/sfx/2005/2005-preview.mp3');
+        // Suara Grand Reveal (Campuran Bass Boom + Triumphant Bell yang Elegan)
+        const grandRevealSound = new Audio('https://assets.mixkit.co/active_storage/sfx/2018/2018-preview.mp3');
+
+        // --- FUNGSI DATA ---
+        function loadFromStorage() {
+            const storedSchools = localStorage.getItem(STORAGE_KEYS.SCHOOLS);
+            const storedResults = localStorage.getItem(STORAGE_KEYS.RESULTS);
+            const storedMapping = localStorage.getItem(STORAGE_KEYS.MAPPING);
+
+            schools = storedSchools ? JSON.parse(storedSchools) : DEFAULT_SCHOOLS;
+            results = storedResults ? JSON.parse(storedResults) : {};
+            
+            sortSchools();
+            
+            finalMapping = storedMapping ? JSON.parse(storedMapping) : calculateLogic();
+            saveToStorage();
+        }
+
+        function saveToStorage() {
+            localStorage.setItem(STORAGE_KEYS.SCHOOLS, JSON.stringify(schools));
+            localStorage.setItem(STORAGE_KEYS.RESULTS, JSON.stringify(results));
+            localStorage.setItem(STORAGE_KEYS.MAPPING, JSON.stringify(finalMapping));
+        }
+
+        function sortSchools() {
+            schools.sort((a, b) => a.localeCompare(b, undefined, {sensitivity: 'base', numeric: true}));
+        }
+
+        function calculateLogic() {
+            const n = schools.length;
+            const availableNumbers = Array.from({length: n}, (_, i) => i + 1);
+            const mapping = {};
+
+            const lockedNumbers = Object.values(results);
+            const remainingNumbers = availableNumbers.filter(num => !lockedNumbers.includes(num));
+            const remainingSchools = schools.filter(s => !results[s]);
+
+            for (let i = remainingNumbers.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [remainingNumbers[i], remainingNumbers[j]] = [remainingNumbers[j], remainingNumbers[i]];
+            }
+
+            for (const s in results) {
+                mapping[s] = results[s];
+            }
+
+            remainingSchools.forEach((school, index) => {
+                mapping[school] = remainingNumbers[index];
+            });
+
+            return mapping;
+        }
+
+        // --- FUNGSI VISUAL ---
+        function drawWheel() {
+            if (!ctx) return;
+            const sectors = schools.length;
+            if (sectors === 0) {
+                ctx.clearRect(0, 0, 600, 600);
+                return;
+            }
+            const arc = (2 * Math.PI) / sectors;
+            ctx.clearRect(0, 0, 600, 600);
+
+            for (let i = 0; i < sectors; i++) {
+                const angle = i * arc;
+                ctx.beginPath();
+                ctx.fillStyle = i % 2 === 0 ? '#ff4b2b' : '#1a2a6c';
+                ctx.moveTo(300, 300);
+                ctx.arc(300, 300, 290, angle, angle + arc);
+                ctx.lineTo(300, 300);
+                ctx.fill();
+                ctx.strokeStyle = "rgba(255,255,255,0.3)";
+                ctx.lineWidth = 1;
+                ctx.stroke();
+
+                ctx.save();
+                ctx.translate(300, 300);
+                ctx.rotate(angle + arc / 2);
+                ctx.textAlign = "right";
+                ctx.fillStyle = "#fff";
+                ctx.font = sectors > 25 ? "bold 12px Poppins" : "bold 16px Poppins";
+                ctx.fillText(i + 1, 275, 5);
+                ctx.restore();
+            }
+        }
+
+        function updateUI() {
+            const list = document.getElementById('schoolList');
+            if (!list) return;
+            list.innerHTML = "";
+            const totalSchools = schools.length;
+            document.getElementById('schoolCount').innerText = totalSchools;
+
+            sortSchools();
+
+            const undone = schools.filter(s => !results[s]);
+            const done = schools.filter(s => !!results[s]);
+            const displayList = [...undone, ...done];
+
+            displayList.forEach((school) => {
+                const indexInOriginal = schools.indexOf(school);
+                const isDone = !!results[school];
+                const isActive = currentSchool === school;
+                
+                const div = document.createElement('div');
+                div.className = `school-item flex justify-between items-center p-3 rounded-xl border border-white/10 ${isDone ? 'school-done' : 'bg-white/5 cursor-pointer'} ${isActive ? 'active-school' : ''}`;
+                
+                div.innerHTML = `
+                    <span class="font-medium truncate flex-1" onclick="!isSpinning && !results['${school}'] ? selectSchool('${school}') : null">${school}</span>
+                    <div class="flex items-center space-x-1 ml-2">
+                        ${!isDone ? `
+                            <button onclick="editSchool(${indexInOriginal})" class="p-1 hover:bg-white/20 rounded-lg text-xs" title="Ubah Nama">✏️</button>
+                            <button onclick="deleteSchool(${indexInOriginal})" class="p-1 hover:bg-red-500/50 rounded-lg text-xs" title="Hapus Sekolah">🗑️</button>
+                        ` : `
+                            <button onclick="undoSchoolResult('${school.replace(/'/g, "\\'")}')" class="p-1 hover:bg-yellow-500/50 rounded-lg text-xs flex items-center justify-center bg-yellow-600/20" title="Undi Ulang Sekolah Ini">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                </svg>
+                            </button>
+                            <span class="text-xs text-green-400 font-bold px-1">✓</span>
+                        `}
+                    </div>
+                `;
+                list.appendChild(div);
+            });
+
+            const resultsArea = document.getElementById('resultsArea');
+            if (resultsArea) {
+                resultsArea.innerHTML = "";
+                const sortedResultsEntries = Object.entries(results).reverse();
+                const drawnCount = sortedResultsEntries.length;
+                
+                const indicator = document.getElementById('resultsIndicator');
+                if (indicator) indicator.innerText = `${drawnCount}/${totalSchools}`;
+                
+                sortedResultsEntries.forEach(([school, num]) => {
+                    const div = document.createElement('div');
+                    div.className = "p-3 bg-white text-gray-900 rounded-xl flex justify-between items-center shadow-lg border-l-4 border-red-600 scale-up-center group";
+                    div.innerHTML = `
+                        <div class="flex-1 min-w-0 pr-2">
+                            <span class="font-bold text-sm block truncate">${school}</span>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <button onclick="undoSchoolResult('${school.replace(/'/g, "\\'")}')" class="opacity-0 group-hover:opacity-100 p-2 bg-gray-100 hover:bg-red-100 text-red-600 rounded-lg transition-all" title="Undi Ulang">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                </svg>
+                            </button>
+                            <span class="bg-red-600 text-white px-3 py-1 rounded-full font-black text-lg shadow-sm">#${num}</span>
+                        </div>
+                    `;
+                    resultsArea.appendChild(div);
+                });
+            }
+            
+            drawWheel();
+        }
+
+        // --- FUNGSI INTERAKSI ---
+        function selectSchool(school) {
+            if (isSpinning || results[school]) return;
+            currentSchool = school;
+            if (spinBtn) spinBtn.disabled = false;
+            if (statusMsg) {
+                statusMsg.innerText = `Sekolah terpilih: ${school}`;
+                statusMsg.classList.add('text-green-300');
+            }
+            updateUI();
+        }
+
+        function undoSchoolResult(schoolName) {
+            if (isSpinning) return;
+            if (confirm(`Apakah Anda yakin ingin membatalkan hasil undian untuk ${schoolName} dan mengundinya ulang?\nNomor #${results[schoolName]} akan dikembalikan ke dalam undian.`)) {
+                delete results[schoolName];
+                if (currentSchool === schoolName) currentSchool = null;
+                
+                finalMapping = calculateLogic();
+                saveToStorage();
+                updateUI();
+                if (statusMsg) {
+                    statusMsg.innerText = `Hasil ${schoolName} telah dibatalkan. Silakan undi kembali.`;
+                    statusMsg.classList.remove('text-green-300');
+                }
+            }
+        }
+
+        function deleteSchool(index) {
+            if (isSpinning) return;
+            const schoolName = schools[index];
+            if (results[schoolName]) return;
+            
+            if (confirm(`Apakah Anda yakin ingin menghapus ${schoolName}?`)) {
+                schools.splice(index, 1);
+                if (currentSchool === schoolName) {
+                    currentSchool = null;
+                    if (spinBtn) spinBtn.disabled = true;
+                }
+                sortSchools();
+                finalMapping = calculateLogic();
+                saveToStorage();
+                updateUI();
+            }
+        }
+
+        function editSchool(index) {
+            if (isSpinning) return;
+            const oldName = schools[index];
+            const newName = prompt("Ubah Nama Sekolah:", oldName);
+            if (newName && newName.trim() !== "" && newName !== oldName) {
+                schools[index] = newName.trim();
+                sortSchools();
+                finalMapping = calculateLogic();
+                saveToStorage();
+                updateUI();
+            }
+        }
+
+        function addNewSchool() {
+            const name = prompt("Masukkan Nama Sekolah Baru:");
+            if (name && name.trim() !== "") {
+                const trimmedName = name.trim();
+                if (schools.includes(trimmedName)) {
+                    alert("Nama sekolah sudah terdaftar!");
+                    return;
+                }
+                schools.push(trimmedName);
+                sortSchools();
+                finalMapping = calculateLogic();
+                saveToStorage();
+                updateUI();
+            }
+        }
+
+        function handleSpin() {
+            if (!currentSchool || isSpinning) return;
+
+            isSpinning = true;
+            if (spinBtn) spinBtn.disabled = true;
+            if (statusMsg) {
+                statusMsg.innerText = "Sedang menentukan nomor keberuntungan...";
+                statusMsg.classList.remove('text-green-300');
+            }
+
+            // Putar Suara Putaran
+            spinSound.currentTime = 0;
+            spinSound.loop = true;
+            spinSound.play();
+
+            const sectors = schools.length;
+            const arc = (2 * Math.PI) / sectors;
+            const targetNum = finalMapping[currentSchool];
+            
+            const targetSectorIndex = targetNum - 1;
+            const targetAngleRel = ( (2 * Math.PI) - (targetSectorIndex * arc) - (arc / 2) - (Math.PI / 2) ) % (2 * Math.PI);
+            const currentAngleMod = currentRotation % (2 * Math.PI);
+            
+            let diff = targetAngleRel - currentAngleMod;
+            if (diff <= 0) diff += 2 * Math.PI;
+
+            const laps = 15;
+            currentRotation += (laps * 2 * Math.PI) + diff;
+            if (canvas) canvas.style.transform = `rotate(${currentRotation}rad)`;
+
+            setTimeout(() => {
+                finalizeResult(currentSchool, targetNum);
+            }, 6100);
+        }
+
+        function finalizeResult(school, num) {
+            spinSound.pause();
+            spinSound.loop = false;
+
+            // Bunyikan suara Grand Reveal yang mantap dan setara kualitasnya dengan putaran
+            grandRevealSound.currentTime = 0;
+            grandRevealSound.play();
+
+            results[school] = num;
+            isSpinning = false;
+            saveToStorage();
+            updateUI();
+
+            document.getElementById('modalSchool').innerText = school;
+            document.getElementById('modalNumber').innerText = num;
+            document.getElementById('resultModal').style.display = 'flex';
+
+            currentSchool = null;
+            if (statusMsg) statusMsg.innerText = "Selesai! Silakan pilih sekolah selanjutnya.";
+        }
+
+        function closeModal() {
+            document.getElementById('resultModal').style.display = 'none';
+        }
+
+        function handleReset() {
+            if (isSpinning) return;
+            if (confirm("Peringatan: Seluruh hasil undian akan dihapus. Lanjutkan?")) {
+                results = {};
+                currentSchool = null;
+                currentRotation = 0; 
+                if (canvas) {
+                    canvas.style.transition = 'none';
+                    canvas.style.transform = 'rotate(0rad)';
+                    setTimeout(() => {
+                        canvas.style.transition = 'transform 6s cubic-bezier(0.15, 0, 0.15, 1)';
+                    }, 50);
+                }
+                
+                sortSchools();
+                finalMapping = calculateLogic();
+                saveToStorage();
+                updateUI();
+                if (statusMsg) statusMsg.innerText = "Data berhasil direset.";
+                if (spinBtn) spinBtn.disabled = true;
+            }
+        }
+
+        function exportToExcel() {
+            if (Object.keys(results).length === 0) {
+                alert("Belum ada hasil undian yang dapat diekspor.");
+                return;
+            }
+
+            const sortedSchoolsList = [...schools].sort((a, b) => a.localeCompare(b, undefined, {sensitivity: 'base', numeric: true}));
+
+            const data = sortedSchoolsList.map((school, idx) => ({
+                "No": idx + 1,
+                "Nama Sekolah": school,
+                "Nomor Undian": results[school] || "Belum Diundi"
+            }));
+
+            const worksheet = XLSX.utils.json_to_sheet(data);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Hasil Undian");
+
+            const now = new Date();
+            const yyyy = now.getFullYear();
+            const mm = String(now.getMonth() + 1).padStart(2, '0');
+            const dd = String(now.getDate()).padStart(2, '0');
+            const hh = String(now.getHours()).padStart(2, '0');
+            const min = String(now.getMinutes()).padStart(2, '0');
+            
+            const filename = `Edi Brata Undian ${yyyy}${mm}${dd} ${hh}.${min}.xlsx`;
+            XLSX.writeFile(workbook, filename);
+        }
+
+        function initApp() {
+            canvas = document.getElementById('wheel');
+            if (canvas) ctx = canvas.getContext('2d');
+            spinBtn = document.getElementById('spinBtn');
+            statusMsg = document.getElementById('statusMessage');
+            
+            if (spinBtn) spinBtn.onclick = handleSpin;
+
+            loadFromStorage();
+            updateUI();
+        }
+
+        window.addEventListener('load', initApp);
+    </script>
+</body>
+</html>
